@@ -6,11 +6,12 @@
 package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import org.gradle.api.Project
-import org.gradle.api.artifacts.*
+import org.gradle.api.artifacts.ModuleIdentifier
+import org.gradle.api.artifacts.ModuleVersionIdentifier
+import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.component.ComponentWithCoordinates
 import org.gradle.api.component.ComponentWithVariants
 import org.gradle.api.internal.component.SoftwareComponentInternal
-import org.gradle.api.internal.component.UsageContext
 import org.gradle.api.publish.maven.MavenPublication
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinTarget
@@ -94,38 +95,6 @@ class KotlinVariantWithMetadataVariant(
     internal val metadataTarget: AbstractKotlinTarget
 ) : KotlinVariantWithCoordinates(producingCompilation, usages), ComponentWithVariants {
     override fun getVariants() = metadataTarget.components
-}
-
-class KotlinVariantWithMetadataDependency(
-    producingCompilation: KotlinCompilation<*>,
-    val originalUsages: Set<DefaultKotlinUsageContext>,
-    private val metadataTarget: AbstractKotlinTarget
-) : KotlinVariantWithCoordinates(producingCompilation, originalUsages) {
-    override fun getUsages(): Set<KotlinUsageContext> = originalUsages.mapTo(mutableSetOf()) { usageContext ->
-        KotlinUsageContextWithAdditionalDependencies(usageContext, setOf(metadataDependency()))
-    }
-
-    private fun metadataDependency(): ModuleDependency {
-        val metadataComponent = metadataTarget.kotlinComponents.single() as KotlinTargetComponentWithPublication
-        val project = metadataTarget.project
-
-        // The metadata component may not be published, e.g. if the whole project is not published:
-        val metadataPublication: MavenPublication? = metadataComponent.publicationDelegate
-
-        val metadataGroupId = metadataPublication?.groupId ?: project.group
-        val metadataArtifactId = metadataPublication?.artifactId ?: metadataComponent.defaultArtifactId
-        val metadataVersion = metadataPublication?.version ?: project.version
-        return target.project.dependencies.module("$metadataGroupId:$metadataArtifactId:$metadataVersion") as ModuleDependency
-    }
-
-    class KotlinUsageContextWithAdditionalDependencies(
-        val parentUsageContext: DefaultKotlinUsageContext,
-        val additionalDependencies: Set<ModuleDependency>
-    ) : KotlinUsageContext by parentUsageContext {
-        override fun getDependencies() = parentUsageContext.dependencies + additionalDependencies
-
-        override fun getGlobalExcludes(): Set<ExcludeRule> = emptySet()
-    }
 }
 
 class JointAndroidKotlinTargetComponent(

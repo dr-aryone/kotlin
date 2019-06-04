@@ -674,15 +674,11 @@ class NewMultiplatformIT : BaseGradleIT() {
                 // No root publication:
                 assertNoSuchFile("$groupRepoDir/sample-lib")
 
-                // Check that the platform publications have the metadata dependency
+                // Check that the platform publications have POMs and no module files
                 listOf("jvm6", "nodejs", "wasm32", nativeHostTargetName.toLowerCase()).forEach { targetAppendix ->
-                    val targetPomPath = "$groupRepoDir/sample-lib-$targetAppendix/1.0/sample-lib-$targetAppendix-1.0.pom"
-                    assertFileContains(
-                        targetPomPath,
-                        "<groupId>com.example</groupId>",
-                        "<artifactId>sample-lib-metadata</artifactId>",
-                        "<version>1.0</version>"
-                    )
+                    val targetModuleRepoDir = "$groupRepoDir/sample-lib-$targetAppendix/1.0/"
+                    assertFileExists(targetModuleRepoDir + "sample-lib-$targetAppendix-1.0.pom")
+                    assertNoSuchFile(targetModuleRepoDir + "sample-lib-$targetAppendix-1.0.module")
                 }
             }
         }
