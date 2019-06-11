@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.gradle.internals
 
+import org.jetbrains.kotlin.gradle.plugin.mpp.CheckMetadataDependencies
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinProjectStructureMetadata
 import org.w3c.dom.Document
 
@@ -13,3 +14,6 @@ fun parseKotlinSourceSetMetadataFromXml(document: Document): KotlinProjectStruct
 
 const val MULTIPLATFORM_PROJECT_METADATA_FILE_NAME =
     org.jetbrains.kotlin.gradle.plugin.mpp.MULTIPLATFORM_PROJECT_METADATA_FILE_NAME
+
+const val CHECK_METADATA_DEPENDENCIES_ERROR_MESSAGE_TITLE =
+    CheckMetadataDependencies.ERROR_MESSAGE_TITLE

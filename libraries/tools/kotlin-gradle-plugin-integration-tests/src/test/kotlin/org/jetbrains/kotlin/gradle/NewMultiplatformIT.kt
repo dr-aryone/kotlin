@@ -4,6 +4,7 @@
  */
 package org.jetbrains.kotlin.gradle
 
+import org.jetbrains.kotlin.gradle.internals.CHECK_METADATA_DEPENDENCIES_ERROR_MESSAGE_TITLE
 import org.jetbrains.kotlin.gradle.plugin.ProjectLocalConfigurations
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmWithJavaTargetPreset
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinMultiplatformPlugin
@@ -1833,5 +1834,55 @@ class NewMultiplatformIT : BaseGradleIT() {
         // Also check that the flag for keeping POMs intact works:
         doTestPomRewriting(mppProjectDependency = false, legacyPublishing = false, keepPomIntact = true)
         doTestPomRewriting(mppProjectDependency = false, legacyPublishing = true, keepPomIntact = true)
+    }
+
+    @Test
+    fun testDetectDirectMetadataDependencies() = with(Project("sample-app", gradleVersion, "new-mpp-lib-and-app")) {
+        val repo = with(Project("sample-lib", gradleVersion, "new-mpp-lib-and-app")) {
+            build("publish", "-PenableNative=false") {
+                assertSuccessful()
+            }
+
+            projectDir.resolve("repo")
+        }
+
+        setupWorkingDir()
+        gradleBuildScript().modify {
+            it.checkedReplace(
+                "implementation 'com.example:sample-lib:1.0'",
+                "api 'com.example:sample-lib:1.0'"
+            ) + "\nrepositories { maven { setUrl(\"${repo.toURI()}\") } }"
+        }
+
+        val checkMetadataTaskName = "checkKotlinMetadataDependencies"
+
+        build(checkMetadataTaskName, "-PenableNative=false") {
+            assertSuccessful()
+            assertNotContains(CHECK_METADATA_DEPENDENCIES_ERROR_MESSAGE_TITLE)
+            assertTasksExecuted(":$checkMetadataTaskName")
+        }
+
+        gradleBuildScript().modify {
+            it.checkedReplace(
+                "api 'com.example:sample-lib:1.0'",
+                "api 'com.example:sample-lib-metadata:1.0'"
+            )
+        }
+
+        build(checkMetadataTaskName, "-PenableNative=false") {
+            assertFailed()
+            assertContains(CHECK_METADATA_DEPENDENCIES_ERROR_MESSAGE_TITLE)
+            assertContains("* com.example:sample-lib-metadata:1.0")
+        }
+
+        gradleSettingsScript().modify { it.checkedReplace("enableFeaturePreview", "//") }
+
+        if (testGradleVersionAtLeast("5.3-rc-2")) {
+            build(checkMetadataTaskName, "-PenableNative=false") {
+                assertFailed()
+                assertContains(CHECK_METADATA_DEPENDENCIES_ERROR_MESSAGE_TITLE)
+                assertContains("* com.example:sample-lib-metadata:1.0")
+            }
+        }
     }
 }

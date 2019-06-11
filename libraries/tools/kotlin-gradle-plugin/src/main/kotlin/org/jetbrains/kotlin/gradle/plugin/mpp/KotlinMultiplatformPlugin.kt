@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.sources.DefaultLanguageSettingsBuilder
 import org.jetbrains.kotlin.gradle.scripting.internal.ScriptingGradleSubplugin
 import org.jetbrains.kotlin.gradle.targets.metadata.isKotlinGranularMetadataEnabled
+import org.jetbrains.kotlin.gradle.tasks.createOrRegisterTask
 import org.jetbrains.kotlin.gradle.utils.*
 import org.jetbrains.kotlin.konan.target.HostManager
 import org.jetbrains.kotlin.konan.target.presetName
@@ -67,10 +68,10 @@ class KotlinMultiplatformPlugin(
             addExtension("presets", presets)
 
             isGradleMetadataAvailable =
-                    featurePreviews.activeFeatures.find { it.name == "GRADLE_METADATA" }?.let { metadataFeature ->
-                        isGradleMetadataExperimental = true
-                        featurePreviews.isFeatureEnabled(metadataFeature)
-                    } ?: true // the feature entry will be gone once the feature is stable
+                featurePreviews.activeFeatures.find { it.name == "GRADLE_METADATA" }?.let { metadataFeature ->
+                    isGradleMetadataExperimental = true
+                    featurePreviews.isFeatureEnabled(metadataFeature)
+                } ?: true // the feature entry will be gone once the feature is stable
         }
 
         setupDefaultPresets(project)
@@ -90,6 +91,8 @@ class KotlinMultiplatformPlugin(
         setupCompilerPluginOptions(project)
 
         project.pluginManager.apply(ScriptingGradleSubplugin::class.java)
+
+        setupDirectMetadataDependenciesCheck(project)
 
         UnusedSourceSetsChecker.checkSourceSets(project)
     }
@@ -246,6 +249,34 @@ class KotlinMultiplatformPlugin(
             target.compilations.findByName(KotlinCompilation.TEST_COMPILATION_NAME)?.let { testCompilation ->
                 sourceSets.findByName(testCompilation.defaultSourceSetName)?.dependsOn(test)
             }
+        }
+    }
+
+    private fun setupDirectMetadataDependenciesCheck(project: Project) {
+        // If this module is published, check the Kotlin metadata dependencies for not being direct dependencies on Kotlin metadata
+        // modules that were published with Gradle module metadata:
+        val checkMetadataDependencyTaskHandler =
+            project.createOrRegisterTask<CheckMetadataDependencies>("checkKotlinMetadataDependencies") { task ->
+                task.onlyIf {
+                    // Check in published projects, as incorrect dependencies may break dependency resolution for a consumer who
+                    // uses Gradle module metadata
+                    val isPublishedProject = project.pluginManager.hasPlugin("maven-publish")
+
+                    // and eagerly detect this in projects with Gradle module metadata, as otherwise it will mysteriously fail
+                    // during dependency resolution of a platform configuration (like jvmCompileClasspath)
+                    val isModuleMetadataConsumedByThisProject =
+                        project.multiplatformExtension.isGradleMetadataAvailable || isGradleVersionAtLeast(5, 3)
+
+                    isPublishedProject || isModuleMetadataConsumedByThisProject
+                }
+            }
+
+        project.multiplatformExtension.targets.all { target ->
+            val mainCompilation = target.compilations.getByName(KotlinCompilation.MAIN_COMPILATION_NAME) ?: return@all
+            project.dependencies.add(
+                mainCompilation.compileDependencyConfigurationName,
+                project.files().builtBy(checkMetadataDependencyTaskHandler.getTaskOrProvider())
+            )
         }
     }
 
